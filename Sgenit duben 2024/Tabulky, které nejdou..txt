@@ -1,0 +1,10 @@
+řádky.
+
+95   -> ZTPPCZ_LSR  -> Pracoviště neexistuje
+118  -> ZTQMCZ_MOK  -> Není kompletní nebo definován
+134  -> ZTPPCZ_PFA  -> Není kompletní nebo definován
+136  -> ZTPPCZ_PKO  -> Není kompletní nebo definován
+158  -> ZTPPCZ_PTE  -> Není kompletní nebo definován
+159  -> ZTPPCZ_PTX  -> Není kompletní nebo definován
+195  -> ZTPPCZ_RSTA -> Není v dictionary k dispozici
+238  -> ZTPPCZ_MOPM -> Není kompletní nebo definován

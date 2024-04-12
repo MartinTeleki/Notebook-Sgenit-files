@@ -1,0 +1,60 @@
+CV03N
+CV04N , zadám DRW 
+objettové propojení musí být na materiál
+záložka objektová propojení, vyber usi kmenové soubor mateiráu v pravo na lince a musím do materiálu dát hvězdičku.
+Dám provedení v CV04N a uvidím provedení, dke to můžu zkoušet.
+
+Uživatel cce, aby seznam materiálu -> 
+najdu v dčíslu dokumentu. 
+ON bude mít číslo mateirálu a já vytvoím tabulu s čísly mateiráku.
+Potm půjud a každý jeden řádek, CV03N, bud heldat, zda tam ten mateirál má přiřazení k dokumentu. najdu to v cv03nN a v doplnových datech jsou data dokumentu a je tam číslo třeba 1 bla bla vla 41.
+
+já skočím do dokumentu 41, zda má PNG nebo JPG a vezmu drubý mateirál, udělám to samé a dám jin materiál, třeba kbike_kolo, doplnková data a jisítm, že má dva dokuemnty, 35 a fe_icko. DRW.
+
+číslo dokumentu je 10000000041 tabulka DRAW pole DOKNR
+Potřebuji druh a číslo dokumentu( nepovinná dílčí dokument a verze dokumentu.
+
+
+Tabulka: DRAW.
+
+Dokument   DOKNR
+Druh dokumentu DOKAR
+Dílčí dokument DOKTL
+Verze dokumentu DOKVR
+
+Po rozkliknutí čísla dokumentu mi vyjede číslo materiálu a krátký text
+FG139 a FIN129,MTS-DI,PD,QM.
+
+TABULKA MARA a MCDOK
+Materiál MATNR ( MARA )
+Krátký text DKTXT ( tabulka MCDOK )
+
+Abych zjisitl, zda to  má připojený dokument, třeba JPG 
+nebo PNG, tak musím vlízt do dokumentu čísla 1xx42 
+vlezu do popisů a vidím popis, podle toho poznám, 
+zda je nebo není v tabulce.
+
+Jazyk je X
+Popis je DKTXT ( tabulka DMS_DB_DRAT )
+
+Co můžu spojit ?
+
+Tabulku DRAW s tabulkou MCDOK.
+Jejich společným je DRAD.
+
+Prý se to může propojit pomocí DRAD.
+
+Pomocí tabulyk DRAD zjisítm:
+číslo dokumentu, v jakém je materiál v tabulce a název mateirálu.
+DRAT obsahuje navíc i název krátkého textu ! :D
+
+Spojit DRAT DRAD a DRAW na základě DOKNR.
+
+Jak zjistit že je to v PDF ? nebo v jakém formátu ?
+
+Vyhledat podle Materiálu MATNR a podle MAKTX ( dlouhý text materiálu )
+makt
+přeložit název do češtiny
+a přidat závod.
+
+číslo závodu an oslední místo a klíč objektu nqa prvni místo ( od do)

@@ -1,0 +1,142 @@
+*&---------------------------------------------------------------------*
+*& Report  ZRPPCZ_AFKO_CHECK
+*&
+*&---------------------------------------------------------------------*
+*&
+*&
+*&---------------------------------------------------------------------*
+
+REPORT  zrppcz_afko_check.
+
+TABLES: aufk, afpo.
+
+SELECTION-SCREEN BEGIN OF BLOCK b01 WITH FRAME TITLE text-b01.
+
+SELECT-OPTIONS: so_aufnr FOR afpo-aufnr.
+
+SELECTION-SCREEN END OF BLOCK b01.
+
+TYPES: BEGIN OF ty_data,
+       aufnr TYPE aufnr,
+       matnr TYPE co_matnr,
+       wemng type co_wemng,
+       meins type lagme,
+       dgltp TYPE co_gltrp,
+       END OF ty_data.
+
+DATA: gt_data TYPE ty_data.
+
+
+*----------------------------------------------------------------------*
+*       CLASS lcl_data DEFINITION
+*----------------------------------------------------------------------*
+*
+*----------------------------------------------------------------------*
+CLASS lcl_data DEFINITION.
+
+  PUBLIC SECTION.
+    METHODS: run,
+    read_data,
+    find_max_value,
+    display.
+
+  PRIVATE SECTION.
+    DATA: gt_data TYPE TABLE OF ty_data,
+          gs_data TYPE ty_data,
+          gr_data TYPE REF TO   ty_data.
+
+ENDCLASS.                    "lcl_data DEFINITION
+*----------------------------------------------------------------------*
+*       CLASS lcl_data IMPLEMENTATION
+*----------------------------------------------------------------------*
+*
+*----------------------------------------------------------------------*
+CLASS lcl_data IMPLEMENTATION.
+  METHOD run.
+    read_data( ).
+    find_max_value( ).
+    display( ).
+  ENDMETHOD.                    "run
+
+  METHOD read_data.
+
+    SELECT aufk~aufnr
+           afpo~matnr
+           afpo~wemng
+           afpo~meins
+           afpo~dgltp
+      FROM aufk
+      INNER JOIN afpo ON afpo~aufnr = aufk~aufnr
+      INTO CORRESPONDING FIELDS OF TABLE gt_data
+      WHERE afpo~aufnr IN so_aufnr      ORDER BY afpo~matnr.
+
+  ENDMETHOD.                    "read_data
+
+  METHOD find_max_value.
+
+    DATA: lt_temporary_data TYPE TABLE OF ty_data,
+          ls_temporary_data TYPE ty_data,
+          lr_temporary_data TYPE REF TO ty_data,
+
+          lv_last_matnr TYPE co_matnr,
+          lv_last_dgltp TYPE co_gltrp.
+
+    SORT gt_data BY matnr dgltp DESCENDING.
+
+    LOOP AT gt_data REFERENCE INTO lr_temporary_data.
+      IF lr_temporary_data->matnr NE lv_last_matnr.
+
+        APPEND ls_temporary_data TO lt_temporary_data.
+
+        lv_last_matnr = lr_temporary_data->matnr.
+        lv_last_dgltp = lr_temporary_data->dgltp.
+
+      ELSE.
+        DELETE gt_data INDEX sy-tabix.
+      ENDIF.
+    ENDLOOP.
+
+  ENDMETHOD.                    "read_Data
+
+  METHOD display.
+    DATA: lo_salv    TYPE REF TO cl_salv_table,
+        lv_key     TYPE        salv_s_layout_key,
+        lo_header  TYPE REF TO cl_salv_form_layout_grid,
+        lo_h_flow  TYPE REF TO cl_salv_form_layout_flow,
+        lo_fun     TYPE REF TO cl_salv_functions,
+        lo_event   TYPE REF TO cl_salv_events_table,
+        lo_cols    TYPE REF TO cl_salv_columns,
+        lo_col     TYPE REF TO cl_salv_column_list,
+        lo_lay     TYPE REF TO cl_salv_layout.
+
+    TRY.
+        cl_salv_table=>factory(
+          IMPORTING
+            r_salv_table = lo_salv
+          CHANGING
+            t_table      = gt_data ).
+
+        lo_fun = lo_salv->get_functions( ).
+        lo_fun->set_all( ).
+
+        lv_key-report = sy-repid.
+        lo_lay = lo_salv->get_layout( ).
+        lo_lay->set_save_restriction( ).
+        lo_lay->set_default( abap_true ).
+        lo_lay->set_key( value = lv_key ).
+
+        lo_cols = lo_salv->get_columns( ).
+        lo_cols->set_optimize( ).
+
+        lo_salv->display( ).
+
+      CATCH cx_salv_msg.
+    ENDTRY.
+  ENDMETHOD.                    "display
+ENDCLASS.                    "lcl_data IMPLEMENTATION
+
+DATA: go_data TYPE REF TO lcl_data.
+
+START-OF-SELECTION.
+  CREATE OBJECT go_data.
+  go_data->run( ).

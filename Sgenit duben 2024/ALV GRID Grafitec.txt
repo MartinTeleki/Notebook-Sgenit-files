@@ -1,0 +1,510 @@
+*&---------------------------------------------------------------------*
+*& Report ZMT_REPORT_DOCUMENT_INFO
+*&---------------------------------------------------------------------*
+*&
+*&---------------------------------------------------------------------*
+REPORT zmt_report_document_info_alv.
+
+TABLES: drad, drat, dms_doc_files, makt, marc, resb, mara.
+
+SELECTION-SCREEN BEGIN OF BLOCK b01 WITH FRAME TITLE TEXT-b01.
+  SELECT-OPTIONS:
+              so_werks FOR marc-werks,
+              so_matnr FOR makt-matnr,
+              so_mtart FOR mara-mtart          NO INTERVALS,
+              so_rsnum FOR resb-rsnum,
+              so_maktx FOR makt-maktx,
+              so_objk  FOR drad-objky,
+              so_dktx  FOR drat-dktxt          NO INTERVALS,
+              so_doknr FOR drad-doknr,
+              so_dokar FOR drad-dokar          NO INTERVALS,
+              so_dokvr FOR drad-dokvr.
+
+  SELECTION-SCREEN BEGIN OF BLOCK b05 WITH FRAME TITLE TEXT-b05.
+
+    SELECTION-SCREEN BEGIN OF BLOCK b04 WITH FRAME TITLE TEXT-b04.
+      SELECT-OPTIONS: so_dappx FOR dms_doc_files-dappl NO INTERVALS.
+      PARAMETERS: p_chang3 TYPE char1 AS CHECKBOX USER-COMMAND click .
+    SELECTION-SCREEN END OF BLOCK b04.
+
+    SELECTION-SCREEN BEGIN OF BLOCK b03 WITH FRAME TITLE TEXT-b03.
+      SELECT-OPTIONS: so_dappl FOR dms_doc_files-dappl NO INTERVALS.
+      PARAMETERS: p_chang2 TYPE char1 AS CHECKBOX USER-COMMAND click .
+    SELECTION-SCREEN END OF BLOCK b03.
+
+    SELECTION-SCREEN BEGIN OF BLOCK b02 WITH FRAME TITLE TEXT-b02.
+      SELECT-OPTIONS:  so_dokob FOR drad-dokob   NO INTERVALS.
+      PARAMETERS: p_chang TYPE char1 AS CHECKBOX USER-COMMAND click .
+    SELECTION-SCREEN END OF BLOCK b02.
+
+  SELECTION-SCREEN END OF BLOCK b05.
+
+SELECTION-SCREEN END OF BLOCK b01.
+
+
+
+
+*&---------------------------------------------------------------------*
+*& Definition and implementation
+*&---------------------------------------------------------------------*
+
+
+
+TYPES: BEGIN OF ty_data,
+         werks  TYPE werks_d,
+         matnr  TYPE matnr,
+         maktx  TYPE maktx,
+         objky  TYPE objky,
+         doknr  TYPE doknr,
+         dokar  TYPE dokar,
+         dokvr  TYPE dokvr,
+         doktl  TYPE doktl_d,
+         dokob  TYPE dokob,
+         dappl  TYPE dappl,
+         dapplx TYPE char1,
+         dokobx TYPE icon_d,
+         rsnum  TYPE rsnum,
+         mtart  TYPE mtart,
+         xloek  TYPE xloek,
+       END OF ty_data.
+
+
+
+CLASS lcl_data DEFINITION.
+
+  PUBLIC SECTION.
+    METHODS: run,
+      read_data,
+      display,
+
+      user_command IMPORTING p_ucomm    TYPE sy-ucomm
+                             p_selfield TYPE slis_selfield.
+
+    METHODS: on_hotspot_click FOR EVENT hotspot_click OF cl_gui_alv_grid
+      IMPORTING es_row_no e_column_id e_row_id.
+
+
+  PRIVATE SECTION.
+    DATA: gt_data TYPE TABLE OF ty_data,
+          gr_data TYPE REF TO   ty_data.
+
+    DATA: lt_fieldcat TYPE slis_t_fieldcat_alv,
+          ls_fieldcat TYPE slis_fieldcat_alv.
+
+    DATA: t_event TYPE slis_t_event.
+
+
+
+
+
+
+
+ENDCLASS.
+
+CLASS lcl_data IMPLEMENTATION.
+  METHOD run.
+    read_data( ).
+    display( ).
+  ENDMETHOD.                            " lcl_data
+
+*&---------------------------------------------------------------------*
+*& Select and implementation of logical operations.
+*&---------------------------------------------------------------------*
+
+  METHOD read_data.
+
+    SELECT
+          marc~werks,
+          drad~objky,
+          makt~matnr,
+          makt~maktx,
+          drad~doknr,
+          drad~dokar,
+          drad~dokvr,
+          drad~dokob,
+          drad~doktl,
+"          dms_doc_files~dappl,
+          resb~rsnum,
+          resb~xloek,
+          mara~mtart
+    FROM makt
+      INNER JOIN marc ON marc~matnr = makt~matnr
+      INNER JOIN mara ON mara~matnr = makt~matnr
+      INNER JOIN resb ON resb~matnr = makt~matnr
+      LEFT JOIN  drad  ON drad~objky = makt~matnr
+    WHERE makt~matnr  IN @so_matnr AND
+          makt~maktx  IN @so_maktx AND
+                 spras = @sy-langu AND
+                 xloek <> `X` AND
+         marc~werks          IN @so_werks AND
+         drad~objky          IN @so_objk  AND
+         drad~doknr          IN @so_doknr AND
+         drad~dokar          IN @so_dokar AND
+         drad~dokvr          IN @so_dokvr AND
+         mara~mtart          IN @so_mtart AND
+         resb~rsnum          IN @so_rsnum
+
+    ORDER BY makt~matnr
+    INTO CORRESPONDING FIELDS OF TABLE @gt_data.
+*&---------------------------------------------------------------------*
+*& Marks of format of document
+*&---------------------------------------------------------------------*
+    DATA: ls_data TYPE        ty_data,
+          lr_data TYPE REF TO ty_data.
+
+    LOOP AT gt_data REFERENCE INTO lr_data.
+      SELECT SINGLE dappl FROM dms_doc_files INTO @lr_data->dappl
+        WHERE doknr = @lr_data->doknr.
+    ENDLOOP.
+
+
+    CLEAR lr_data.
+
+    IF so_dappx IS NOT INITIAL AND p_chang3 IS NOT INITIAL.
+      LOOP AT gt_data REFERENCE INTO lr_data.
+        IF NOT lr_data->dappl = so_dappx-low.
+          lr_data->dapplx = `X`.
+        ELSE.
+          lr_data->dapplx = space.
+        ENDIF.
+      ENDLOOP.
+    ELSEIF so_dappx IS NOT INITIAL AND p_chang IS INITIAL.
+      LOOP AT gt_data REFERENCE INTO lr_data.
+        IF lr_data->dappl = so_dappx-low.
+          lr_data->dapplx = `X`.
+        ELSE.
+          lr_data->dapplx = space.
+        ENDIF.
+      ENDLOOP.
+    ENDIF.
+
+    CLEAR lr_data.
+
+    LOOP AT gt_data REFERENCE INTO lr_data.
+      SELECT SINGLE @abap_true FROM drad INTO @DATA(lv_exists)
+        WHERE  doknr = @lr_data->doknr AND
+               objky = @lr_data->objky AND
+               dokob = `MARA`.
+      IF sy-subrc = 0.
+        lr_data->dokobx = icon_led_green.
+      ELSE.
+        lr_data->dokobx = icon_led_red.
+      ENDIF.
+    ENDLOOP.
+
+    CLEAR lv_exists.
+    CLEAR lr_data.
+
+
+
+*&---------------------------------------------------------------------*
+*& Selection of dappl
+*&---------------------------------------------------------------------*
+    DATA:
+      r_dappl  TYPE RANGE OF dms_doc_files-dappl,
+      ls_dappl LIKE LINE OF  r_dappl,
+      lr_dappl LIKE REF TO   so_dappl.
+
+    IF so_dappl[] IS NOT INITIAL.
+      LOOP AT so_dappl REFERENCE INTO lr_dappl.
+        CLEAR: ls_dappl.
+        IF p_chang2 IS NOT INITIAL.
+          IF lr_dappl->sign EQ `I`.
+            ls_dappl-sign = `E`.
+          ELSE.
+            ls_dappl-sign = `I`.
+          ENDIF.
+        ELSE.
+          ls_dappl-sign = lr_dappl->sign.
+        ENDIF.
+        ls_dappl-option = `EQ`.
+        ls_dappl-low = |{ lr_dappl->low }|.
+        APPEND ls_dappl TO r_dappl.
+      ENDLOOP.
+
+      DELETE gt_data WHERE dappl NOT IN r_dappl.
+    ENDIF.
+
+    CLEAR lr_data.
+*&---------------------------------------------------------------------*
+*& Selection of dokob
+*&---------------------------------------------------------------------*
+    DATA:
+      r_dokob  TYPE RANGE OF drad-dokob,
+      ls_dokob LIKE LINE OF  r_dokob,
+      lr_dokob LIKE REF TO   so_dokob.
+
+    IF so_dokob[] IS NOT INITIAL.
+      LOOP AT so_dokob REFERENCE INTO lr_dokob.
+        CLEAR: ls_dokob.
+        IF p_chang IS NOT INITIAL.
+          IF lr_dokob->sign EQ `I`.
+            ls_dokob-sign = `E`.
+          ELSE.
+            ls_dokob-sign = `I`.
+          ENDIF.
+        ELSE.
+          ls_dokob-sign = lr_dokob->sign.
+        ENDIF.
+        ls_dokob-option = `CP`.
+        ls_dokob-low = |*{ lr_dokob->low }*|.
+        APPEND ls_dokob TO r_dokob.
+      ENDLOOP.
+
+      DELETE gt_data WHERE dokob NOT IN r_dokob.
+    ENDIF.
+
+  ENDMETHOD.
+
+
+
+  METHOD on_hotspot_click.
+    DATA: l_mess   TYPE string,
+          l_row(2) TYPE c.
+
+    WRITE es_row_no-row_id TO l_row.
+    CONCATENATE 'Hotspot click at: ' e_column_id-fieldname 'in'
+                                     l_row 'row.'
+                                     INTO l_mess SEPARATED BY space.
+    MESSAGE l_mess TYPE 'I'.
+
+  ENDMETHOD.
+
+*&---------------------------------------------------------------------*
+*&Display the data
+*&---------------------------------------------------------------------*
+
+  METHOD display.
+
+    CLEAR ls_fieldcat.
+    ls_fieldcat-col_pos = 1.
+    ls_fieldcat-fieldname = `WERKS`.
+*    ls_fieldcat-key = `X`.
+    ls_fieldcat-tabname = `GT_DATA`.
+    ls_fieldcat-seltext_m = `Závod`.
+    APPEND ls_fieldcat TO lt_fieldcat.
+
+    CLEAR ls_fieldcat.
+    ls_fieldcat-col_pos = 2.
+    ls_fieldcat-fieldname = `MATNR`.
+*    ls_fieldcat-key = `X`.
+    ls_fieldcat-tabname = `GT_DATA`.
+    ls_fieldcat-seltext_m = `Materiál`.
+    APPEND ls_fieldcat TO lt_fieldcat.
+
+    CLEAR ls_fieldcat.
+    ls_fieldcat-col_pos = 3.
+    ls_fieldcat-fieldname = `MAKTX`.
+*    ls_fieldcat-key = `X`.
+    ls_fieldcat-tabname = `GT_DATA`.
+    ls_fieldcat-seltext_m = `Krátký text`.
+    APPEND ls_fieldcat TO lt_fieldcat.
+
+    CLEAR ls_fieldcat.
+    ls_fieldcat-col_pos = 4.
+    ls_fieldcat-fieldname = `OBJKY`.
+*    ls_fieldcat-key = `X`.
+    ls_fieldcat-tabname = `GT_DATA`.
+    ls_fieldcat-seltext_m = `Materiál`.
+    APPEND ls_fieldcat TO lt_fieldcat.
+
+    CLEAR ls_fieldcat.
+    ls_fieldcat-col_pos = 5.
+    ls_fieldcat-fieldname = `DOKNR`.
+*    ls_fieldcat-key = `X`.
+    ls_fieldcat-hotspot = `X`.
+    ls_fieldcat-tabname = `GT_DATA`.
+    ls_fieldcat-seltext_m = `Dokument`.
+    APPEND ls_fieldcat TO lt_fieldcat.
+
+    CLEAR ls_fieldcat.
+    ls_fieldcat-col_pos = 6.
+    ls_fieldcat-fieldname = `DOKAR`.
+*    ls_fieldcat-key = `X`.
+    ls_fieldcat-tabname = `GT_DATA`.
+    ls_fieldcat-seltext_m = `Druh dok.`.
+    APPEND ls_fieldcat TO lt_fieldcat.
+
+    CLEAR ls_fieldcat.
+    ls_fieldcat-col_pos = 7.
+    ls_fieldcat-fieldname = `DOKVR`.
+*    ls_fieldcat-key = `X`.
+    ls_fieldcat-tabname = `GT_DATA`.
+    ls_fieldcat-seltext_m = `Verze dok.`.
+    APPEND ls_fieldcat TO lt_fieldcat.
+
+    CLEAR ls_fieldcat.
+    ls_fieldcat-col_pos = 8.
+    ls_fieldcat-fieldname = `DOKTL`.
+*    ls_fieldcat-key = `X`.
+    ls_fieldcat-tabname = `GT_DATA`.
+    ls_fieldcat-seltext_m = `Dílčí dok.`.
+    APPEND ls_fieldcat TO lt_fieldcat.
+
+    CLEAR ls_fieldcat.
+    ls_fieldcat-col_pos = 9.
+    ls_fieldcat-fieldname = `DOKOB`.
+*    ls_fieldcat-key = `X`.
+    ls_fieldcat-tabname = `GT_DATA`.
+    ls_fieldcat-seltext_m = `Objekt SAP`.
+    APPEND ls_fieldcat TO lt_fieldcat.
+
+    CLEAR ls_fieldcat.
+    ls_fieldcat-col_pos = 10.
+    ls_fieldcat-fieldname = `DAPPL`.
+*    ls_fieldcat-key = `X`.
+    ls_fieldcat-hotspot = `X`.
+    ls_fieldcat-tabname = `GT_DATA`.
+    ls_fieldcat-seltext_m = `Aplikace WS`.
+    APPEND ls_fieldcat TO lt_fieldcat.
+
+    CLEAR ls_fieldcat.
+    ls_fieldcat-col_pos = 11.
+    ls_fieldcat-fieldname = `DAPPLX`.
+*    ls_fieldcat-key = `X`.
+    ls_fieldcat-tabname = `GT_DATA`.
+    ls_fieldcat-seltext_m = `Zad. for. dok.`.
+    APPEND ls_fieldcat TO lt_fieldcat.
+
+    CLEAR ls_fieldcat.
+    ls_fieldcat-col_pos = 12.
+    ls_fieldcat-fieldname = `DOKOBX`.
+*    ls_fieldcat-key = `X`.
+    ls_fieldcat-tabname = `GT_DATA`.
+    ls_fieldcat-seltext_m = `Pro. mat. SAP`.
+    ls_fieldcat-hotspot = `X`.
+    APPEND ls_fieldcat TO lt_fieldcat.
+
+    CLEAR ls_fieldcat.
+    ls_fieldcat-col_pos = 13.
+    ls_fieldcat-fieldname = `RSNUM`.
+    "    ls_fieldcat-key = `X`.
+    ls_fieldcat-tabname = `GT_DATA`.
+    ls_fieldcat-seltext_m = `Číslo rez.`.
+    APPEND ls_fieldcat TO lt_fieldcat.
+
+    CLEAR ls_fieldcat.
+    ls_fieldcat-col_pos = 14.
+    ls_fieldcat-fieldname = `MTART`.
+    "    ls_fieldcat-key = `X`.
+    ls_fieldcat-hotspot = `X`.
+    ls_fieldcat-tabname = `GT_DATA`.
+    ls_fieldcat-seltext_m = `Druh materiálu`.
+    APPEND ls_fieldcat TO lt_fieldcat.
+
+    CLEAR ls_fieldcat.
+    ls_fieldcat-col_pos = 15.
+    ls_fieldcat-fieldname = `XLOEK`.
+    "    ls_fieldcat-key = `X`.
+    ls_fieldcat-tabname = `GT_DATA`.
+    ls_fieldcat-seltext_m = `Položka vym.`.
+    APPEND ls_fieldcat TO lt_fieldcat.
+
+
+
+
+
+    DATA: ls_variant TYPE disvariant.
+
+
+    CALL FUNCTION 'REUSE_ALV_GRID_DISPLAY'
+      EXPORTING
+*       I_INTERFACE_CHECK       = ' '
+*       I_BYPASSING_BUFFER      = ' '
+*       I_BUFFER_ACTIVE         = ' '
+        i_callback_program      = sy-cprog
+*       I_CALLBACK_PF_STATUS_SET          = ' '
+        i_callback_user_command = 'USER_COMMAND'
+*       I_CALLBACK_TOP_OF_PAGE  = ' '
+*       I_CALLBACK_HTML_TOP_OF_PAGE       = ' '
+*       I_CALLBACK_HTML_END_OF_LIST       = ' '
+*       I_STRUCTURE_NAME        =
+*       I_BACKGROUND_ID         = ' '
+*       I_GRID_TITLE            =
+*       I_GRID_SETTINGS         =
+*       IS_LAYOUT               =
+        it_fieldcat             = lt_fieldcat
+*       IT_EXCLUDING            =
+*       IT_SPECIAL_GROUPS       =
+*       IT_SORT                 =
+*       IT_FILTER               =
+*       IS_SEL_HIDE             =
+        i_default               = 'X'
+        i_save                  = 'X'
+        is_variant              = ls_variant
+        it_events               = t_event
+*       IT_EVENT_EXIT           =
+*       IS_PRINT                =
+*       IS_REPREP_ID            =
+*       I_SCREEN_START_COLUMN   = 0
+*       I_SCREEN_START_LINE     = 0
+*       I_SCREEN_END_COLUMN     = 0
+*       I_SCREEN_END_LINE       = 0
+*       I_HTML_HEIGHT_TOP       = 0
+*       I_HTML_HEIGHT_END       = 0
+*       IT_ALV_GRAPHICS         =
+*       IT_HYPERLINK            =
+*       IT_ADD_FIELDCAT         =
+*       IT_EXCEPT_QINFO         =
+*       IR_SALV_FULLSCREEN_ADAPTER        =
+*       O_PREVIOUS_SRAL_HANDLER =
+*     IMPORTING
+*       E_EXIT_CAUSED_BY_CALLER =
+*       ES_EXIT_CAUSED_BY_USER  =
+      TABLES
+        t_outtab                = gt_data
+      EXCEPTIONS
+        program_error           = 1
+        OTHERS                  = 2.
+    IF sy-subrc <> 0.
+* Implement suitable error handling here
+    ENDIF.
+
+
+  ENDMETHOD.                       "display
+
+  METHOD user_command.
+    IF p_selfield-value NE space.
+      "    MESSAGE `Ahoj` TYPE `I`.
+
+      CASE p_selfield-fieldname.
+        WHEN `DOKNR`.
+          SET PARAMETER ID 'CV1' FIELD p_selfield-value.
+          CALL TRANSACTION 'CV03N' AND SKIP FIRST SCREEN.
+
+        WHEN `DAPPL`.
+          SET PARAMETER ID 'CV2' FIELD p_selfield-value.
+          CALL TRANSACTION 'CV03N' AND SKIP FIRST SCREEN.
+
+        WHEN `DOKOBX`.
+          SET PARAMETER ID 'CV3' FIELD p_selfield-value.
+          CALL TRANSACTION 'CV03N' AND SKIP FIRST SCREEN.
+
+      ENDCASE.
+
+    ENDIF.
+  ENDMETHOD.
+ENDCLASS.
+
+
+
+
+*&---------------------------------------------------------------------*
+*& Run data
+*&---------------------------------------------------------------------*
+DATA: go_data TYPE REF TO lcl_data.
+
+START-OF-SELECTION.
+  CREATE OBJECT go_data.
+  go_data->run( ).
+
+FORM user_command
+        USING p_ucomm LIKE sy-ucomm
+              p_selfield TYPE slis_selfield.
+
+  go_data->user_command(
+    EXPORTING
+      p_ucomm    = p_ucomm
+      p_selfield = p_selfield
+  ).
+ENDFORM.

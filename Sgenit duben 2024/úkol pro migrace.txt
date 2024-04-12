@@ -1,0 +1,38 @@
+Dynamický program -> jak je název select, tak název tabulky
+tak tam přídje proměná, která obsahuje název tabulky.
+where jde udělat dynamicky, ale není potřeba.
+
+Udělá se loop nad seznamem tabulek 
+
+select single* ( vybere celou řádku),
+zajimá nás, jestli to něco našlo.
+sy-subrc = 4 nic nenajde.
+
+UDělá to dynamické selecty. KDe select nic nenajde, napšíe
+se write, seznam tabulek, kde se nic nenašlo.
+
+select jde psát dynamicky a vyspat seznam, dke to nci nenajde.
+
+název tabulek se vypíše do so_option.
+
+použiju select disction. a nebo select * from
+
+vezmu v excelu náezv tabuek, vožím do vstupní obrazovky a
+udělám select. hledám jen ty, které nemají žádný obsah.
+
+
+jiank primárně změnit ty, které jsou prázdné.
+dp1 najdu, že je rázdná a v dp2 zahru do transportu.
+
+ZDa existuje obsah, bduu kontrolovat podle MANDT
+
+so_option dd031-tables
+a do toho políčka si hodím všechny tabulky.
+
+tabname -> jaké je varianty.
+select single mandt from ( proměná s názve tabulky ) into 
+local variable mandt. lv_mandt type mandt.
+za selectem sy-subrc. write, vypíše se.
+
+2h práce. 1h kontrola a transforming a druhá hodina vytvářet program
+25.3.2024

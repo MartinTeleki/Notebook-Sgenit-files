@@ -1,0 +1,345 @@
+*&---------------------------------------------------------------------*
+*& Report ZMT_BASIC_TERMINS_STATUS
+*&---------------------------------------------------------------------*
+*&
+*&---------------------------------------------------------------------*
+REPORT zmt_basic_termins_status.
+
+TABLES: afko, aufk, afpo, bsvx.
+
+*&---------------------------------------------------------------------*
+*& Selection screen with select option
+*&---------------------------------------------------------------------*
+SELECTION-SCREEN BEGIN OF BLOCK b03 WITH FRAME TITLE TEXT-b03.
+
+  SELECTION-SCREEN BEGIN OF BLOCK b01 WITH FRAME TITLE TEXT-b01.
+
+    SELECT-OPTIONS: so_werks FOR aufk-werks,                              " závod
+                    so_matnr FOR afpo-matnr,                              " číslo materiálu
+                    so_aufnr FOR afko-aufnr,                              " číslo zakázky
+                    so_auart FOR aufk-auart,                              " druh zakázky
+                    so_dispo FOR afko-dispo.                              " Disponent pro zakázku
+
+
+  SELECTION-SCREEN END OF BLOCK b01.
+
+  SELECTION-SCREEN BEGIN OF BLOCK b04 WITH FRAME TITLE TEXT-b04.
+
+    SELECT-OPTIONS: so_statu FOR bsvx-sttxt NO INTERVALS.                 " systémový status
+
+    PARAMETERS: p_exc1 TYPE char1 AS CHECKBOX USER-COMMAND click.
+
+  SELECTION-SCREEN END OF BLOCK b04.
+
+  SELECTION-SCREEN BEGIN OF BLOCK b05 WITH FRAME TITLE TEXT-b04.
+
+    SELECT-OPTIONS: so_state FOR bsvx-sttxt NO INTERVALS.                 " systémový status
+
+    PARAMETERS: p_exc2 TYPE char1 AS CHECKBOX USER-COMMAND click.
+
+  SELECTION-SCREEN END OF BLOCK b05.
+
+  SELECTION-SCREEN BEGIN OF BLOCK b02 WITH FRAME TITLE TEXT-b02.
+    PARAMETERS: p_chang TYPE char1 AS CHECKBOX USER-COMMAND click.
+  SELECTION-SCREEN END OF BLOCK b02.
+
+SELECTION-SCREEN END OF BLOCK b03.
+
+*&---------------------------------------------------------------------*
+*& Types
+*&---------------------------------------------------------------------*
+TYPES: BEGIN OF ty_data,
+         werks       TYPE werks_d,
+         matnr       TYPE co_matnr,
+         aufnr       TYPE aufnr,
+         auart       TYPE aufart,
+         dispo       TYPE co_dispo,
+         elikz       TYPE elikz,
+         gstrp       TYPE pm_ordgstrp,
+         gltrp       TYPE co_gltrp,
+         gltrs       TYPE co_gltrs,
+         ltrmp       TYPE co_ltrmp,
+         objnr       TYPE j_objnr,
+         hold_status TYPE bsvx-sttxt,
+       END OF ty_data.
+
+
+CLASS lcl_data DEFINITION.
+  PUBLIC SECTION.
+    METHODS: run,
+      read_data,
+      update_order,
+      call_function,
+      display.
+
+  PRIVATE SECTION.
+    DATA: gt_data TYPE TABLE OF ty_data,
+          gs_data TYPE          ty_data,
+          gr_data type REF TO   ty_data.
+
+    DATA: hold_status       TYPE bsvx-sttxt,
+          hold_user_status1 TYPE bsvx-sttxt,
+          object_number     TYPE jest-objnr.
+
+    DATA: lt_orders TYPE TABLE OF bapi_order_key.
+
+    DATA: ls_header TYPE cose_s_header,
+          ls_return TYPE bapiret2.
+
+ENDCLASS.
+
+CLASS lcl_data IMPLEMENTATION.
+  METHOD run.
+    read_data( ).
+    update_order( ).
+    call_function( ).
+    display( ).
+
+  ENDMETHOD.
+
+*&---------------------------------------------------------------------*
+*& SELECT
+*&---------------------------------------------------------------------*
+  METHOD read_data.
+
+    SELECT
+           aufk~werks,
+           afpo~matnr,
+           afko~aufnr,
+           aufk~auart,
+           afko~dispo,
+           afpo~elikz,
+           afko~gstrp,
+           afko~gltrp,
+           afko~gltrs,
+           afpo~ltrmp,
+           aufk~objnr
+
+      FROM afko
+      INNER JOIN aufk ON aufk~aufnr = afko~aufnr
+      INNER JOIN afpo ON afpo~aufnr = afko~aufnr
+
+      WHERE    aufk~aufnr IN @so_aufnr
+      AND      afpo~matnr IN @so_matnr
+      AND      aufk~werks IN @so_werks
+      AND      aufk~auart IN @so_auart
+      AND      afko~dispo IN @so_dispo
+      AND      afpo~ltrmp IS NOT INITIAL
+      AND      afpo~ltrmp LT afko~gltrs
+
+       ORDER BY afko~aufnr
+      INTO TABLE @gt_data.
+
+  ENDMETHOD.                                              "read_data
+
+*&---------------------------------------------------------------------*
+*& Call Function STATUS_TEXT_EDIT
+*&---------------------------------------------------------------------*
+  METHOD call_function.
+
+    DATA: lr_data   TYPE REF TO   ty_data,
+          r_status  TYPE RANGE OF bsvx-sttxt,
+          ls_status LIKE LINE OF  r_status,
+          lr_status LIKE REF TO   so_statu,
+          lr_state  LIKE REF TO   so_state.
+
+*&---------------------------------------------------------------------*
+*& so_statu fields
+*&---------------------------------------------------------------------*
+
+
+
+
+
+    IF so_statu[] IS NOT INITIAL.
+      LOOP AT so_statu REFERENCE INTO lr_status.
+        CLEAR: ls_status.
+        IF p_exc1 IS NOT INITIAL.
+          IF lr_status->sign EQ 'I'.
+            ls_status-sign = 'E'.
+          ELSE.
+            ls_status-sign = 'I'.
+          ENDIF.
+        ELSE.
+          ls_status-sign = lr_status->sign.
+        ENDIF.
+
+        ls_status-option = 'CP'.
+
+        ls_status-low = |*{ lr_status->low }*|.
+
+        APPEND ls_status TO r_status.
+      ENDLOOP.
+    ENDIF.
+
+*&---------------------------------------------------------------------*
+*& so_state fields
+*&---------------------------------------------------------------------*
+
+    IF so_state[] IS NOT INITIAL.
+      LOOP AT so_state REFERENCE INTO lr_state.
+        CLEAR: ls_status.
+        IF p_exc2 IS NOT INITIAL.
+          IF lr_state->sign EQ 'I'.
+            ls_status-sign = 'E'.
+          ELSE.
+            ls_status-sign = 'I'.
+          ENDIF.
+        ELSE.
+          ls_status-sign = lr_state->sign.
+        ENDIF.
+
+        ls_status-option = 'CP'.
+
+        ls_status-low = |*{ lr_state->low }*|.
+        APPEND ls_status TO r_status.
+      ENDLOOP.
+    ENDIF.
+
+*&---------------------------------------------------------------------*
+*& Function STATUS_TEXT_EDIT
+*&---------------------------------------------------------------------*
+
+    LOOP AT gt_data REFERENCE INTO lr_data.
+      CALL FUNCTION 'STATUS_TEXT_EDIT'
+        EXPORTING
+          client           = sy-mandt
+          flg_user_stat    = 'X'
+          objnr            = lr_data->objnr
+          spras            = sy-langu
+        IMPORTING
+          line             = lr_data->hold_status
+        EXCEPTIONS
+          object_not_found = 1
+          OTHERS           = 2.
+    ENDLOOP.
+
+    DELETE gt_data WHERE hold_status NOT IN r_status.
+
+        IF   p_chang = 'X'.                                      " Rozvržené ukončení > Termín dodávky z plánované zakázky
+      LOOP AT gt_data REFERENCE INTO gr_data.
+        gr_data->gltrp = gr_data->gltrs.                         " Pokud je elikz false
+        CLEAR: gr_data->gltrs.
+      ENDLOOP.                                                   "Termín v poli Rozvrženo – konec(CAUFVD-GLTRS) přenes do pole MezTermín –
+
+    ENDIF.
+
+  ENDMETHOD.                                                     "call_function
+
+*&---------------------------------------------------------------------*
+*& Update order
+*&---------------------------------------------------------------------*
+  METHOD update_order.
+
+    IF p_chang = 'X'.
+
+      READ TABLE gt_data REFERENCE INTO gr_data INDEX 1.
+
+      IF sy-subrc EQ 0.
+        CLEAR: ls_header.
+        ls_header-basic_start_date_x = 'X'.
+        ls_header-basic_end_date     = gr_data->gltrp.
+        ls_header-basic_end_date_x   = 'X'.
+
+        CALL FUNCTION 'CO_SE_PRODORD_CHANGE'
+          EXPORTING
+            iv_order_number = gr_data->aufnr
+            is_header       = ls_header
+            iv_commit       = abap_true
+          IMPORTING
+            es_return       = ls_return.
+
+        IF ls_return-type NE 'E'.
+
+          CALL FUNCTION 'BAPI_TRANSACTION_COMMIT'
+            EXPORTING
+              wait = abap_true.
+
+          CLEAR lt_orders.
+          APPEND gr_data->aufnr TO lt_orders.
+
+          CALL FUNCTION 'BAPI_PRODORD_SCHEDULE'
+            IMPORTING
+              return = ls_return
+            TABLES
+              orders = lt_orders.
+
+          IF ls_return-type NE 'E'.
+
+            CALL FUNCTION 'BAPI_TRANSACTION_COMMIT'
+              EXPORTING
+                wait = abap_true.
+          ELSE.
+            CALL FUNCTION 'BAPI_TRANSACTION_ROLLBACK'
+              EXPORTING
+                wait = abap_true.
+          ENDIF.
+        ENDIF.                                              " IF ls_return-type NE 'E'.
+      ENDIF.                                                " IF sy-subrc EQ 0.
+    ENDIF.                                                  " IF p_chang = 'X'.
+
+  ENDMETHOD.                                                "update_order
+
+
+*&---------------------------------------------------------------------*
+*& Show data
+*&---------------------------------------------------------------------*
+  METHOD display.
+
+    IF  p_chang = space.
+      DATA: lo_salv TYPE REF TO cl_salv_table,
+            lv_key  TYPE salv_s_layout_key.
+
+      DATA: lo_header TYPE REF TO cl_salv_form_layout_grid,
+            lo_h_flow TYPE REF TO cl_salv_form_layout_flow.
+
+      TRY.
+          cl_salv_table=>factory(
+            IMPORTING
+              r_salv_table = lo_salv
+            CHANGING
+              t_table      = gt_data ).
+
+          DATA(lo_fun) = lo_salv->get_functions( ).
+          lo_fun->set_all( ).
+
+          lv_key-report = sy-repid.
+          DATA(lo_lay) = lo_salv->get_layout( ).
+          lo_lay->set_save_restriction( ).
+          lo_lay->set_default( abap_true ).
+          lo_lay->set_key( value = lv_key ).
+
+          DATA(lo_cols) = lo_salv->get_columns( ).
+          lo_cols->set_optimize( ).
+
+          DATA: lo_col TYPE REF TO cl_salv_column_table.
+
+
+          CREATE OBJECT lo_header.
+
+          lo_h_flow = lo_header->create_flow( row = 1  column = 1 ).
+          lo_h_flow->create_label( text = 'Počet nalezených výsledků' ).
+
+          lo_h_flow = lo_header->create_flow( row = 1  column = 2 ).
+          lo_h_flow->create_text( text = lines( gt_data ) ).
+
+          lo_salv->set_top_of_list( lo_header ).
+
+          lo_salv->display( ).
+
+
+        CATCH cx_salv_msg.
+      ENDTRY.
+    ENDIF.
+  ENDMETHOD.                                                   " display
+ENDCLASS.
+
+*&---------------------------------------------------------------------*
+*& Run data
+*&---------------------------------------------------------------------*
+
+DATA: go_data TYPE REF TO lcl_data.
+
+START-OF-SELECTION.
+  CREATE OBJECT go_data.
+  go_data->run( ).

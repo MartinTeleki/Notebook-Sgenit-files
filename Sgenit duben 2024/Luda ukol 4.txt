@@ -1,0 +1,521 @@
+*&---------------------------------------------------------------------*
+*& Report  ZDMS_DOCUMENT_INFO
+*&
+*&---------------------------------------------------------------------*
+
+REPORT zdms_document_info.
+
+TABLES: drad, drat, dms_doc_files, makt, marc, resb, mara.
+
+SELECTION-SCREEN BEGIN OF BLOCK b01 WITH FRAME TITLE text-b01.
+SELECT-OPTIONS:
+            so_werks FOR marc-werks,
+            so_matnr FOR makt-matnr,
+            so_mtart FOR mara-mtart                   NO INTERVALS,
+            so_rsnum FOR resb-rsnum,
+            so_maktx FOR makt-maktx,
+            so_objk  FOR drad-objky                   NO INTERVALS,
+            so_dktx  FOR drat-dktxt                   NO INTERVALS,
+            so_doknr FOR drad-doknr                   NO INTERVALS,
+            so_dokar FOR dms_doc_files-dokar          NO INTERVALS,
+            so_dokvr FOR dms_doc_files-dokvr.
+
+SELECTION-SCREEN BEGIN OF BLOCK b05 WITH FRAME TITLE text-b05.
+
+SELECTION-SCREEN BEGIN OF BLOCK b04 WITH FRAME TITLE text-b04.
+SELECT-OPTIONS: so_dappx FOR dms_doc_files-dappl NO INTERVALS.
+PARAMETERS: p_chang3 TYPE char1 AS CHECKBOX USER-COMMAND click .
+SELECTION-SCREEN END OF BLOCK b04.
+
+SELECTION-SCREEN BEGIN OF BLOCK b03 WITH FRAME TITLE text-b03.
+SELECT-OPTIONS: so_dappl FOR dms_doc_files-dappl NO INTERVALS.
+PARAMETERS: p_chang2 TYPE char1 AS CHECKBOX USER-COMMAND click .
+SELECTION-SCREEN END OF BLOCK b03.
+
+SELECTION-SCREEN BEGIN OF BLOCK b02 WITH FRAME TITLE text-b02.
+SELECT-OPTIONS:  so_dokob FOR drad-dokob   NO INTERVALS.
+PARAMETERS: p_chang TYPE char1 AS CHECKBOX USER-COMMAND click .
+SELECTION-SCREEN END OF BLOCK b02.
+
+SELECTION-SCREEN END OF BLOCK b05.
+
+SELECTION-SCREEN END OF BLOCK b01.
+
+*&---------------------------------------------------------------------*
+*& Definition and implementation
+*&---------------------------------------------------------------------*
+
+TYPES: BEGIN OF ty_data,
+         werks  TYPE werks_d,
+         matnr  TYPE matnr,
+         maktx  TYPE maktx,
+         objky  TYPE objky,
+         doknr  TYPE doknr,
+         dokar  TYPE dokar,
+         dokvr  TYPE dokvr,
+         doktl  TYPE doktl_d,
+         dokob  TYPE dokob,
+         dappl  TYPE dappl,
+         dapplx TYPE char1,
+         dokobx TYPE icon_d,
+"         rsnum  TYPE rsnum,
+         mtart  TYPE mtart,
+         xloek  TYPE xloek,
+         bdart  TYPE bdart,
+"         rspos  TYPE rspos,
+       END OF ty_data.
+
+TYPES: BEGIN OF ty_final_data,
+         werks  TYPE werks_d,
+         matnr  TYPE matnr,
+         maktx  TYPE maktx,
+         objky  TYPE objky,
+         doknr  TYPE doknr,
+         dokar  TYPE dokar,
+         dokvr  TYPE dokvr,
+         doktl  TYPE doktl_d,
+         dokob  TYPE dokob,
+         dappl  TYPE dappl,
+         dapplx TYPE char1,
+         dokobx TYPE icon_d,
+         rsnum  TYPE rsnum,
+         mtart  TYPE mtart,
+         xloek  TYPE xloek,
+         bdart  TYPE bdart,
+         rspos  TYPE rspos,
+       END OF ty_final_data.
+
+
+*----------------------------------------------------------------------*
+*       CLASS lcl_data DEFINITION
+*----------------------------------------------------------------------*
+*
+*----------------------------------------------------------------------*
+CLASS lcl_data DEFINITION.
+
+  PUBLIC SECTION.
+    METHODS: run,
+      read_data,
+      display.
+
+  PRIVATE SECTION.
+    DATA: gt_data TYPE TABLE OF ty_data,
+          gs_data TYPE ty_data,
+          gr_data TYPE REF TO   ty_data.
+
+
+
+    METHODS:
+      on_link_click
+        FOR EVENT link_click OF cl_salv_events_table
+        IMPORTING
+          row
+          column.
+ENDCLASS.                    "lcl_data DEFINITION
+
+*----------------------------------------------------------------------*
+*       CLASS lcl_data IMPLEMENTATION
+*----------------------------------------------------------------------*
+*
+*----------------------------------------------------------------------*
+CLASS lcl_data IMPLEMENTATION.
+  METHOD run.
+    read_data( ).
+    display( ).
+  ENDMETHOD.                            " lcl_data
+
+*&---------------------------------------------------------------------*
+*& Select and implementation of logical operations.
+*&---------------------------------------------------------------------*
+
+  METHOD read_data.
+
+    DATA: lt_selected_data TYPE TABLE OF ty_final_data,
+          ls_selected_data  TYPE          ty_final_data,
+          lr_selected_data  TYPE REF TO   ty_final_data .
+
+    DATA: lt_final_data TYPE TABLE OF ty_data,
+          ls_final_data TYPE          ty_data,
+          lr_final_data TYPE REF TO   ty_data .
+
+    SELECT DISTINCT
+          marc~werks
+          resb~matnr
+          makt~maktx
+"          resb~rsnum
+          resb~xloek
+          resb~bdart  "přidáno 5.4.2024
+          mara~mtart
+          drad~objky
+          drad~doknr
+          drad~dokar
+          drad~dokvr
+          drad~dokob
+          drad~doktl
+"          resb~rspos "přidání 6.4.2024
+    FROM resb
+
+      INNER JOIN mara ON mara~matnr = resb~matnr
+      INNER JOIN marc ON marc~matnr = resb~matnr AND marc~werks = resb~werks
+      INNER JOIN makt ON makt~matnr = resb~matnr
+      LEFT JOIN drad ON drad~objky = resb~matnr
+      INTO CORRESPONDING FIELDS OF TABLE lt_selected_data
+    WHERE makt~matnr  IN so_matnr AND
+          makt~maktx  IN so_maktx AND
+                 spras = sy-langu AND
+                 xloek <> `X` AND
+                 bdart = `AR` AND
+                 rspos <> space AND
+         mara~mtart          IN so_mtart AND
+         marc~werks          IN so_werks AND
+         resb~rsnum          IN so_rsnum.
+
+    "    ORDER BY resb~rsnum.
+
+*&---------------------------------------------------------------------*
+*& DAPPL ( Formát dokumentu )
+*&---------------------------------------------------------------------*
+
+    LOOP AT lt_selected_data REFERENCE INTO lr_selected_data.
+      SELECT DISTINCT dappl
+       FROM dms_doc_files
+        INTO CORRESPONDING FIELDS OF TABLE lt_final_data
+       WHERE dms_doc_files~doknr = lr_selected_data->doknr AND
+             dms_doc_files~dokar = lr_selected_data->dokar.
+
+      LOOP AT lt_final_data INTO ls_final_data.
+        MOVE-CORRESPONDING lr_selected_data->* TO gs_data.
+        gs_data-dappl = ls_final_data-dappl.
+        APPEND gs_data TO gt_data.
+      ENDLOOP.
+
+    ENDLOOP.
+    CLEAR: lt_final_data, ls_final_data, lr_final_data, gr_data.
+
+*&---------------------------------------------------------------------*
+*& Marks of format of document
+*&---------------------------------------------------------------------*
+    DATA: ls_data TYPE        ty_data,
+          lr_data TYPE REF TO ty_data.
+
+    DATA: lv_exists TYPE string.
+
+    CLEAR: lr_data, lv_exists, lr_data.
+
+    IF so_dappx IS NOT INITIAL AND p_chang3 IS NOT INITIAL.
+      LOOP AT gt_data REFERENCE INTO lr_data.
+        IF NOT lr_data->dappl = so_dappx-low.
+          lr_data->dapplx = `X`.
+        ELSE.
+          lr_data->dapplx = space.
+        ENDIF.
+      ENDLOOP.
+    ELSEIF so_dappx IS NOT INITIAL AND p_chang IS INITIAL.
+      LOOP AT gt_data REFERENCE INTO lr_data.
+        IF lr_data->dappl = so_dappx-low.
+          lr_data->dapplx = `X`.
+        ELSE.
+          lr_data->dapplx = space.
+        ENDIF.
+      ENDLOOP.
+    ENDIF.
+
+    CLEAR lr_data.
+    CLEAR lv_exists.
+
+    LOOP AT gt_data REFERENCE INTO lr_data.
+
+      SELECT SINGLE doknr FROM drad INTO lv_exists
+        WHERE  doknr = lr_data->doknr AND
+               objky = lr_data->objky AND
+               dokob = `MARA`.
+
+      IF sy-subrc = 0 AND lr_data->dappl <> space.
+        lr_data->dokobx = icon_led_green.
+      ELSE.
+        lr_data->dokobx = icon_led_red.
+      ENDIF.
+
+    ENDLOOP.
+
+    CLEAR: lv_exists, lr_data.
+
+*&---------------------------------------------------------------------*
+*& Selection of dappl
+*&---------------------------------------------------------------------*
+    DATA:
+      r_dappl  TYPE RANGE OF dms_doc_files-dappl,
+      ls_dappl LIKE LINE OF  r_dappl,
+      lr_dappl LIKE REF TO   so_dappl.
+
+*    IF so_dappl[] IS NOT INITIAL.
+*      LOOP AT so_dappl REFERENCE INTO lr_dappl.
+*        CLEAR: ls_dappl.
+*        IF p_chang2 IS NOT INITIAL.
+*          IF lr_dappl->sign EQ `I`.
+*            ls_dappl-sign = `E`.
+*          ELSE.
+*            ls_dappl-sign = `I`.
+*          ENDIF.
+*        ELSE.
+*          ls_dappl-sign = lr_dappl->sign.
+*        ENDIF.
+*        ls_dappl-option = `EQ`.
+*        ls_dappl-low = |{ lr_dappl->low }|.
+*        APPEND ls_dappl TO r_dappl.
+*      ENDLOOP.
+*
+*      DELETE gt_data WHERE dappl NOT IN r_dappl.
+*    ENDIF.
+
+
+    IF p_chang2 IS INITIAL.
+      IF so_dappl[] IS NOT INITIAL.
+        LOOP AT so_dappl REFERENCE INTO lr_dappl.
+          CLEAR: ls_dappl.
+
+              ls_dappl-sign = `I`.
+
+            ls_dappl-sign = lr_dappl->sign.
+
+          ls_dappl-option = `EQ`.
+          ls_dappl-low = |{ lr_dappl->low }|.
+          APPEND ls_dappl TO r_dappl.
+        ENDLOOP.
+
+        DELETE gt_data WHERE dappl NOT IN r_dappl.
+      ENDIF.
+
+    ELSEIF p_chang2 IS NOT INITIAL.
+
+      LOOP AT gt_data REFERENCE INTO lr_data.
+        clear ls_dappl.
+
+
+      ENDLOOP.
+
+
+    ENDIF.
+*&---------------------------------------------------------------------*
+*& Selection of dokob
+*&---------------------------------------------------------------------*
+    DATA:
+      r_dokob  TYPE RANGE OF drad-dokob,
+      ls_dokob LIKE LINE OF  r_dokob,
+      lr_dokob LIKE REF TO   so_dokob.
+
+    IF so_dokob[] IS NOT INITIAL.
+      LOOP AT so_dokob REFERENCE INTO lr_dokob.
+        CLEAR: ls_dokob.
+        IF p_chang IS INITIAL.
+          IF lr_dokob->sign EQ `I`.
+            ls_dokob-sign = `I`.
+          ELSE.
+            ls_dokob-sign = `I`.
+          ENDIF.
+          ls_dokob-option = `CP`.
+          ls_dokob-low = |*{ lr_dokob->low }*|.
+          APPEND ls_dokob TO r_dokob.
+        ENDIF.
+      ENDLOOP.
+      DELETE gt_data WHERE dokob NOT IN r_dokob.
+    ENDIF.
+
+*&---------------------------------------------------------------------*
+*& Selection of Dokar
+*&---------------------------------------------------------------------*
+    DATA:
+      r_dokar  TYPE RANGE OF drad-dokar,
+      ls_dokar LIKE LINE OF  r_dokar,
+      lr_dokar LIKE REF TO   so_dokar.
+
+    IF so_dokar[] IS NOT INITIAL.
+      LOOP AT so_dokar REFERENCE INTO lr_dokar.
+        CLEAR: ls_dokar.
+        IF lr_dokar->sign EQ `I`.
+          ls_dokar-sign = `E`.
+        ELSE.
+          ls_dokar-sign = `I`.
+        ENDIF.
+        ls_dokar-option = `CP`.
+        ls_dokar-low = |{ lr_dokar->low }|.
+        APPEND ls_dokar TO r_dokob.
+      ENDLOOP.
+
+      DELETE gt_data WHERE dokar IN r_dokob.
+    ENDIF.
+
+*&---------------------------------------------------------------------*
+*& Selection of objky
+*&---------------------------------------------------------------------*
+    DATA:
+      r_objky  TYPE RANGE OF drad-objky,
+      ls_objky LIKE LINE OF  r_objky,
+      lr_objky LIKE REF TO   so_objk.
+
+    IF so_objk[] IS NOT INITIAL.
+      LOOP AT so_objk REFERENCE INTO lr_objky.
+        CLEAR: ls_objky.
+        IF lr_objky->sign EQ `I`.
+          ls_objky-sign = `E`.
+        ELSE.
+          ls_objky-sign = `I`.
+        ENDIF.
+        ls_objky-option = `CP`.
+        ls_objky-low = |{ lr_objky->low }|.
+        APPEND ls_objky TO r_objky.
+      ENDLOOP.
+      DELETE gt_data WHERE objky IN r_objky.
+    ENDIF.
+
+*&---------------------------------------------------------------------*
+*& Selection of doknr
+*&---------------------------------------------------------------------*
+
+    CLEAR lr_data.
+    DATA:
+          r_doknr  TYPE RANGE OF drad-doknr,
+          ls_doknr LIKE LINE OF  r_doknr,
+          lr_doknr LIKE REF TO   so_doknr.
+
+    IF so_doknr[] IS NOT INITIAL.
+      LOOP AT so_doknr REFERENCE INTO lr_doknr.
+        CLEAR: ls_doknr.
+        IF lr_doknr->sign EQ `I`.
+          ls_doknr-sign = `E`.
+        ELSE.
+          ls_doknr-sign = `I`.
+        ENDIF.
+        ls_doknr-option = `CP`.
+        ls_doknr-low = |{ lr_doknr->low }|.
+        APPEND ls_doknr TO r_doknr.
+      ENDLOOP.
+
+    ENDIF.
+
+*&---------------------------------------------------------------------*
+*& gt_data = gt_data_final
+*&---------------------------------------------------------------------*
+
+  ENDMETHOD.                    "read_data
+*&---------------------------------------------------------------------*
+*& On link click
+*&---------------------------------------------------------------------*
+
+  METHOD on_link_click.
+
+    DATA lr_data TYPE REF TO ty_data.
+    CLEAR lr_data.
+
+    READ TABLE gt_data REFERENCE INTO lr_data INDEX row.
+    CHECK sy-subrc = 0.
+
+    SET PARAMETER ID 'CV1' FIELD lr_data->doknr.
+    SET PARAMETER ID 'CV2' FIELD lr_data->dokar.
+    SET PARAMETER ID 'CV3' FIELD lr_data->dokvr.
+    SET PARAMETER ID 'CV4' FIELD lr_data->doktl.
+
+    CASE column.
+      WHEN 'DOKNR' OR 'DAPPL' OR `DOKOBX`.
+        CALL TRANSACTION 'CV03N' AND SKIP FIRST SCREEN.
+    ENDCASE.
+
+  ENDMETHOD.               " on_link_click
+*&---------------------------------------------------------------------*
+*&Display the data
+*&---------------------------------------------------------------------*
+
+  METHOD display.
+
+    DATA: lo_salv    TYPE REF TO cl_salv_table,
+          lv_key     TYPE        salv_s_layout_key,
+          lo_header  TYPE REF TO cl_salv_form_layout_grid,
+          lo_h_flow  TYPE REF TO cl_salv_form_layout_flow,
+          lo_fun     TYPE REF TO cl_salv_functions,
+          lo_event   TYPE REF TO cl_salv_events_table,
+          lo_cols    TYPE REF TO cl_salv_columns,
+          lo_col     TYPE REF TO cl_salv_column_list,
+          lo_lay     TYPE REF TO cl_salv_layout.
+
+    TRY.
+        cl_salv_table=>factory(
+          IMPORTING
+            r_salv_table = lo_salv
+          CHANGING
+            t_table      = gt_data ).
+
+        lo_fun = lo_salv->get_functions( ).
+        lo_fun->set_all( ).
+
+        lo_event = lo_salv->get_event( ).
+
+        SET HANDLER on_link_click FOR lo_event.
+
+        lv_key-report = sy-repid.
+        lo_lay = lo_salv->get_layout( ).
+        lo_lay->set_save_restriction( ).
+        lo_lay->set_default( abap_true ).
+        lo_lay->set_key( value = lv_key ).
+
+        lo_cols = lo_salv->get_columns( ).
+        lo_cols->set_optimize( ).
+
+        TRY.
+
+            lo_col ?= lo_cols->get_column( 'DOKNR' ).
+            lo_col->set_cell_type( if_salv_c_cell_type=>hotspot ).
+
+            lo_col ?= lo_cols->get_column( 'DAPPL' ).
+            lo_col->set_cell_type( if_salv_c_cell_type=>hotspot ).
+
+            lo_col ?= lo_cols->get_column( 'OBJKY' ).
+            lo_col->set_long_text( `Propojený materiál` ).
+            lo_col->set_medium_text( `Propojený materiál` ).
+            lo_col->set_short_text( `Materiál` ).
+
+            lo_col ?= lo_cols->get_column( 'MAKTX' ).
+            lo_col->set_long_text( `Krátký text materiálu` ).
+            lo_col->set_medium_text( `Krátký text mater` ).
+            lo_col->set_short_text( `Text Mate.` ).
+
+            lo_col ?= lo_cols->get_column( 'DAPPLX' ).
+            lo_col->set_long_text( `Zadaný formát dokumentu` ).
+            lo_col->set_medium_text( `Zadaný for dok.` ).
+            lo_col->set_short_text( `Format doc` ).
+
+
+            lo_col ?= lo_cols->get_column( 'DOKOBX' ).
+            lo_col->set_cell_type( if_salv_c_cell_type=>hotspot ).
+            lo_col->set_icon( ).
+            lo_col->set_long_text( `Propojený materiál k dokumentu MARA` ).
+            lo_col->set_medium_text( `Propojený materiál` ).
+            lo_col->set_short_text( `Pro. mater` ).
+
+          CATCH cx_salv_not_found.
+        ENDTRY.
+
+        CREATE OBJECT lo_header.
+
+        lo_h_flow = lo_header->create_flow( row = 1  column = 1 ).
+        lo_h_flow->create_label( text = 'Počet nalezených výsledků' ).
+
+        lo_h_flow = lo_header->create_flow( row = 1  column = 2 ).
+        lo_h_flow->create_text( text = lines( gt_data ) ).
+
+        lo_salv->set_top_of_list( lo_header ).
+
+        lo_salv->display( ).
+
+      CATCH cx_salv_msg.
+    ENDTRY.
+  ENDMETHOD.                       "display
+ENDCLASS.                    "lcl_data IMPLEMENTATION
+
+*&---------------------------------------------------------------------*
+*& Run data
+*&---------------------------------------------------------------------*
+DATA: go_data TYPE REF TO lcl_data.
+
+START-OF-SELECTION.
+  CREATE OBJECT go_data.
+  go_data->run( ).

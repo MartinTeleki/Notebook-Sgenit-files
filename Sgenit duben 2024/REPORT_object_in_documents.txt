@@ -1,0 +1,246 @@
+*&---------------------------------------------------------------------*
+*& Report ZMT_REPORT_DOCUMENT_INFO
+*&---------------------------------------------------------------------*
+*&
+*&---------------------------------------------------------------------*
+REPORT zmt_report_document_info.
+
+TABLES: drad, drat, dms_doc_files, makt.
+
+SELECTION-SCREEN BEGIN OF BLOCK b01 WITH FRAME TITLE TEXT-b01.
+
+  SELECT-OPTIONS:
+                  so_objk  FOR drad-objky,
+                  so_dktx  FOR drat-dktxt          NO INTERVALS,
+                  so_maktx FOR makt-maktx,
+                  so_doknr FOR drad-doknr,
+                  so_dokar FOR drad-dokar          NO INTERVALS,
+                  so_dokvr FOR drad-dokvr,
+                  so_dokob FOR drad-dokob          NO INTERVALS,
+                  so_dappl FOR dms_doc_files-dappl NO INTERVALS.
+
+SELECTION-SCREEN END OF BLOCK b01.
+
+TYPES: BEGIN OF ty_data,
+         werks  TYPE werks_d,
+         objky  TYPE objky,   " Klíč objektu správy dokumentů
+         maktx  TYPE maktx,   " KRátký text materiálu
+         dktxt  TYPE dktxt,   " Popis dokumentu
+         doknr  TYPE doknr,   " Název dokumentu
+         dokar  TYPE dokar,   " Druh dokumentu
+         dokvr  TYPE dokvr,   " Verze dokumentu
+         doktl  TYPE doktl_d, " Dílčí dokument
+         dokob  TYPE dokob,   " Propojený objekt SAP
+         dappl  TYPE dappl,   " Formát aplikace
+         dokobx TYPE icon_d,
+       END OF ty_data.
+
+CLASS lcl_data DEFINITION.
+
+  PUBLIC SECTION.
+    METHODS: run,
+      read_data,
+      display.
+
+  PRIVATE SECTION.
+    DATA: gt_data TYPE TABLE OF ty_data,
+          gr_data TYPE REF TO   ty_data.
+
+    METHODS:
+      on_link_click
+        FOR EVENT link_click OF cl_salv_events_table
+        IMPORTING
+          row
+          column.
+
+ENDCLASS.                               " lcl_data
+
+CLASS lcl_data IMPLEMENTATION.
+  METHOD run.
+    read_data( ).
+    display( ).
+  ENDMETHOD.                            " lcl_data
+
+  METHOD read_data.
+
+    SELECT
+           drad~objky,
+           drat~dktxt,
+           drad~doknr,
+           drad~dokar,
+           drad~dokvr,
+           drad~dokob,
+           drad~doktl,
+           dms_doc_files~dappl
+
+
+      FROM drad
+      INNER JOIN drat ON drat~doknr = drad~doknr
+      and drat~dokar = drad~dokar
+      and drat~dokvr = drad~dokvr
+      and drat~doktl = drad~doktl
+      INNER JOIN dms_doc_files            ON dms_doc_files~doknr = drad~doknr
+                                          AND dms_doc_files~dokar = drad~dokar
+                                          AND dms_doc_files~dokvr = drad~dokvr
+                                          AND dms_doc_files~doktl = drad~doktl
+      WHERE
+                      drad~objky          IN @so_objk  AND
+                      drat~dktxt          IN @so_dktx  AND
+                      drad~doknr          IN @so_doknr AND
+                      drad~dokar          IN @so_dokar AND
+                      drad~dokvr          IN @so_dokvr AND
+                      drad~dokob          IN @so_dokob AND
+                      dms_doc_files~dappl IN @so_dappl
+
+      ORDER BY drad~dokar
+      INTO CORRESPONDING FIELDS OF TABLE @gt_data.
+
+*&---------------------------------------------------------------------*
+*& Loop at lt_data
+*&---------------------------------------------------------------------*
+    DATA lr_data TYPE REF TO ty_data.
+
+    CLEAR lr_data.
+    LOOP AT gt_data REFERENCE INTO lr_data.
+
+      SELECT SINGLE @abap_true FROM drad INTO @DATA(lv_exists)
+        WHERE  doknr = @lr_data->doknr AND
+               objky = @lr_data->objky AND
+               dokob = `MARA`.
+
+      IF sy-subrc = 0.
+        lr_data->dokobx = icon_led_green.
+      ELSE.
+        lr_data->dokobx = icon_led_red.
+      ENDIF.
+    ENDLOOP.
+
+    CLEAR lr_data.
+    LOOP AT gt_data REFERENCE INTO lr_data.
+      lr_data->objky = |{ lr_data->objky ALPHA = OUT }|.
+      SELECT SINGLE maktx FROM makt INTO @DATA(lv_maktx)
+        WHERE matnr = @lr_data->objky AND
+              makt~maktx IN @so_maktx AND
+               spras = @sy-langu.
+      lr_data->maktx = lv_maktx.
+    ENDLOOP.
+
+
+  ENDMETHOD.
+
+  METHOD on_link_click.
+    DATA lr_data TYPE REF TO ty_data.
+
+    CLEAR lr_data.
+    READ TABLE gt_data REFERENCE INTO lr_data INDEX row.
+    CHECK sy-subrc = 0.
+
+    SET PARAMETER ID 'CV1' FIELD lr_data->doknr.
+    SET PARAMETER ID 'CV2' FIELD lr_data->dokar.
+    SET PARAMETER ID 'CV3' FIELD lr_data->dokvr.
+
+    CASE column.
+      WHEN 'DOKNR' OR 'DAPPL' OR `DOKOBX`.
+        CALL TRANSACTION 'CV03N' AND SKIP FIRST SCREEN.
+    ENDCASE.
+
+  ENDMETHOD.               " on_link_click
+
+*&---------------------------------------------------------------------*
+*& Display data
+*&---------------------------------------------------------------------*
+  METHOD display.
+    DATA: lo_salv TYPE REF TO cl_salv_table,
+          lv_key  TYPE salv_s_layout_key.
+
+
+    DATA: lo_header TYPE REF TO cl_salv_form_layout_grid,
+          lo_h_flow TYPE REF TO cl_salv_form_layout_flow.
+
+    TRY.
+        cl_salv_table=>factory(
+          IMPORTING
+            r_salv_table = lo_salv
+          CHANGING
+            t_table      = gt_data ).
+
+        DATA(lo_fun) = lo_salv->get_functions( ).
+        lo_fun->set_all( ).
+
+        DATA(lo_event) = lo_salv->get_event( ).
+
+        SET HANDLER on_link_click FOR lo_event.
+
+        lv_key-report = sy-repid.
+        DATA(lo_lay) = lo_salv->get_layout( ).
+        lo_lay->set_save_restriction( ).
+        lo_lay->set_default( abap_true ).
+        lo_lay->set_key( value = lv_key ).
+
+        DATA(lo_cols) = lo_salv->get_columns( ).
+        lo_cols->set_optimize( ).
+
+        TRY.
+
+            DATA(lo_col) = CAST cl_salv_column_table( lo_salv->get_columns( )->get_column( 'DOKNR' ) ).
+            lo_col->set_cell_type( if_salv_c_cell_type=>hotspot ).
+
+            lo_col ?= lo_cols->get_column( 'DOKNR' ).
+            lo_col->set_cell_type( if_salv_c_cell_type=>hotspot ).
+
+            lo_col ?= lo_cols->get_column( 'DAPPL' ).
+            lo_col->set_cell_type( if_salv_c_cell_type=>hotspot ).
+
+            lo_col ?= lo_cols->get_column( 'OBJKY' ).
+            lo_col->set_icon( ).
+            lo_col->set_long_text( `Propojený materiál` ).
+            lo_col->set_medium_text( `Propojený materiál` ).
+            lo_col->set_short_text( `Materiál` ).
+
+            lo_col ?= lo_cols->get_column( 'DKTXT' ).
+            lo_col->set_icon( ).
+            lo_col->set_long_text( `Popis dokumentu` ).
+            lo_col->set_medium_text( `Popis dokumentu` ).
+            lo_col->set_short_text( `Popis dok.` ).
+
+            lo_col ?= lo_cols->get_column( 'MAKTX' ).
+            lo_col->set_icon( ).
+            lo_col->set_long_text( `Krátký text materiálu` ).
+            lo_col->set_medium_text( `Krátký text mater` ).
+            lo_col->set_short_text( `Text Mate.` ).
+
+            lo_col ?= lo_cols->get_column( 'DOKOBX' ).
+            lo_col->set_icon( ).
+            lo_col->set_long_text( `Propojený materiál k dokumentu` ).
+            lo_col->set_medium_text( `Propojený materiál` ).
+            lo_col->set_short_text( `pro. mater` ).
+
+            lo_col->set_cell_type(
+           value = if_salv_c_cell_type=>hotspot
+        ).
+
+          CATCH cx_salv_not_found.
+        ENDTRY.
+
+        CREATE OBJECT lo_header.
+
+        lo_h_flow = lo_header->create_flow( row = 1  column = 1 ).
+        lo_h_flow->create_label( text = 'Počet nalezených výsledků' ).
+
+        lo_h_flow = lo_header->create_flow( row = 1  column = 2 ).
+        lo_h_flow->create_text( text = lines( gt_data ) ).
+
+        lo_salv->set_top_of_list( lo_header ).
+
+        lo_salv->display( ).
+
+      CATCH cx_salv_msg.
+    ENDTRY.
+  ENDMETHOD.                       "display
+ENDCLASS.                          "lcl_data
+
+DATA: go_data TYPE REF TO lcl_data.
+
+START-OF-SELECTION.
+  CREATE OBJECT go_data.
+  go_data->run( ).

@@ -1,0 +1,1 @@
+TeĎ, když budeme vhyledávat podle formátu dokumentu, tak nás zajímá jen to, co ten formát nemá, tak se vypíše ten materiál. + vyloučení, vpyíšou se všechny materiáy, co to mají.

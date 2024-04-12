@@ -1,0 +1,131 @@
+*&---------------------------------------------------------------------*
+*& Report ZMT_REPORT_DOCUMENT_INFO
+*&---------------------------------------------------------------------*
+*&
+*&---------------------------------------------------------------------*
+REPORT zmt_report_document_info.
+
+TABLES: drad, drat.
+
+SELECTION-SCREEN BEGIN OF BLOCK b01 WITH FRAME TITLE TEXT-b01.
+
+  SELECT-OPTIONS: so_dokar FOR drad-dokar,
+                  so_doknr FOR drad-doknr,
+                  so_dokvr FOR drad-dokvr,
+                  so_objk  FOR drad-objky,
+                  so_dktx  FOR drat-dktxt,
+                  so_dokob  FOR drad-dokob.
+
+
+SELECTION-SCREEN END OF BLOCK b01.
+
+
+TYPES: BEGIN OF ty_data,
+         dokar  TYPE dokar,   " Druh dokumentu
+         doknr  TYPE doknr,   " Číslo dokumentu
+         dokvr  TYPE dokvr,   " Verze dokumentu
+         objky  TYPE objky,   " Klíč objektu správy dokumentů
+         dktxt  TYPE dktxt,   " Popis dokumentu
+         dokob  TYPE dokob,   "Propojený objekt SAP
+         dokobx TYPE icon_d,
+       END OF ty_data.
+
+
+DATA: lt_data TYPE TABLE OF ty_data,
+      ls_data TYPE          ty_data,
+      lr_data TYPE REF TO   ty_data.
+
+SELECT drad~dokar,
+       drad~doknr,
+       drad~dokvr,
+       drad~objky,
+       drat~dktxt,
+       drad~dokob
+
+  FROM drad
+  INNER JOIN drat ON drat~doknr = drad~doknr
+  WHERE           drad~dokar IN @so_dokar AND
+                  drad~doknr IN @so_doknr AND
+                  drad~dokvr IN @so_dokvr AND
+                  drad~objky IN @so_objk AND
+                  drat~dktxt IN @so_dktx AND
+                  drad~dokob IN @so_dokob
+*                  drad~dokob = `MARA`
+  ORDER BY drad~dokar
+  INTO TABLE @lt_data.
+*&---------------------------------------------------------------------*
+*& Loop at lt_data
+*&---------------------------------------------------------------------*
+LOOP AT lt_data REFERENCE INTO lr_data.
+
+  SELECT SINGLE @abap_true FROM drad INTO @DATA(lv_exists)
+    WHERE  doknr = @lr_data->doknr AND
+           objky = @lr_data->objky AND
+           dokob = `MARA`.
+
+  IF sy-subrc = 0.
+    lr_data->dokobx = icon_led_green.
+  ELSE.
+    lr_data->dokobx = icon_led_red.
+  ENDIF.
+
+ENDLOOP.
+
+
+
+
+
+
+
+
+
+
+
+
+*&---------------------------------------------------------------------*
+*& Display data
+*&---------------------------------------------------------------------*
+
+DATA: lo_salv TYPE REF TO cl_salv_table,
+      lv_key  TYPE salv_s_layout_key.
+
+DATA: lo_header TYPE REF TO cl_salv_form_layout_grid,
+      lo_h_flow TYPE REF TO cl_salv_form_layout_flow.
+
+TRY.
+    cl_salv_table=>factory(
+      IMPORTING
+        r_salv_table = lo_salv
+      CHANGING
+        t_table      = lt_data ).
+
+    DATA(lo_fun) = lo_salv->get_functions( ).
+    lo_fun->set_all( ).
+
+    lv_key-report = sy-repid.
+    DATA(lo_lay) = lo_salv->get_layout( ).
+    lo_lay->set_save_restriction( ).
+    lo_lay->set_default( abap_true ).
+    lo_lay->set_key( value = lv_key ).
+
+    DATA(lo_cols) = lo_salv->get_columns( ).
+    lo_cols->set_optimize( ).
+
+    DATA: lo_col TYPE REF TO cl_salv_column_table.
+
+
+    CREATE OBJECT lo_header.
+
+    lo_h_flow = lo_header->create_flow( row = 1  column = 1 ).
+    lo_h_flow->create_label( text = 'Počet nalezených výsledků' ).
+
+    lo_h_flow = lo_header->create_flow( row = 1  column = 2 ).
+    lo_h_flow->create_text( text = lines( lt_data ) ).
+
+    lo_salv->set_top_of_list( lo_header ).
+
+    lo_salv->display( ).
+
+
+  CATCH cx_salv_msg.
+ENDTRY.

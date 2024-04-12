@@ -1,0 +1,5 @@
+doplnit osobní čísla = osobní čísla pracoviště
+ZPPCZ_MIG02 - přenos obsahu tabulek
+
+další úkol:
+tabulak z vlny číslo 3.
